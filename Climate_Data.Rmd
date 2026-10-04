@@ -1,0 +1,114 @@
+---
+title: "Climate"
+author: "Winson"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+climate <- readRDS("C:/Users/Winson/Downloads/combined_all_climate_data_2016_2024 (1).rds")
+head(climate)
+```
+
+```{r}
+library(dplyr)
+library(lubridate)
+```
+
+```{r}
+monthly_data_shifted <- climate %>%
+  # Create a new column rounding each date down to the first day of its month
+  mutate(month_date = floor_date(date, "month")) %>%
+  
+  # Group data by BOTH location (geocodigo) and month
+  group_by(geocodigo, month_date) %>%
+  
+  # Compute monthly summaries for each variable
+  summarise(
+    # Temperature averages
+    avg_temp_min = mean(temp_min, na.rm = TRUE),
+    avg_temp_max = mean(temp_max, na.rm = TRUE),
+    avg_temp_med = mean(temp_med, na.rm = TRUE),
+    
+    # Precipitation averages and total
+    avg_precip_min = mean(precip_min, na.rm = TRUE),
+    avg_precip_max = mean(precip_max, na.rm = TRUE),
+    avg_precip_med = mean(precip_med, na.rm = TRUE),
+    avg_precip_total = sum(precip_tot, na.rm = TRUE),
+    
+    # Pressure averages
+    avg_pressao_min = mean(pressao_min, na.rm = TRUE),
+    avg_pressao_max = mean(pressao_max, na.rm = TRUE),
+    avg_pressao_med = mean(pressao_med, na.rm = TRUE),
+    
+    # Humidity averages
+    avg_umid_min = mean(umid_min, na.rm = TRUE),
+    avg_umid_max = mean(umid_max, na.rm = TRUE),
+    avg_umid_med = mean(umid_med, na.rm = TRUE),
+    
+    # Drop grouping after summarising
+    .groups = "drop"
+  ) %>%
+  
+  # Sort data by location and time (important before lagging)
+  arrange(geocodigo, month_date) %>%
+  
+  # Create readable month labels BEFORE lagging
+  mutate(
+    # Label for the current (target) month
+    target_month_year = format(month_date, "%b-%Y"),
+    
+    # Label for the previous month (to track lag relationship)
+    lagged_month_year = lag(target_month_year)
+  ) %>%
+  
+  # Group again by location so lag is applied within each geocodigo
+  group_by(geocodigo) %>%
+  
+  # Shift all variables so each row contains the PREVIOUS month's values
+  mutate(
+    avg_temp_min = lag(avg_temp_min),
+    avg_temp_max = lag(avg_temp_max),
+    avg_temp_med = lag(avg_temp_med),
+    
+    avg_precip_min = lag(avg_precip_min),
+    avg_precip_max = lag(avg_precip_max),
+    avg_precip_med = lag(avg_precip_med),
+    avg_precip_total = lag(avg_precip_total),
+    
+    avg_pressao_min = lag(avg_pressao_min),
+    avg_pressao_max = lag(avg_pressao_max),
+    avg_pressao_med = lag(avg_pressao_med),
+    
+    avg_umid_min = lag(avg_umid_min),
+    avg_umid_max = lag(avg_umid_max),
+    avg_umid_med = lag(avg_umid_med),
+    
+    # Recompute derived averages AFTER lagging
+    # (ensures they reflect lagged values, not current ones)
+    avr_temp_mean = (avg_temp_min + avg_temp_max) / 2,
+    avr_precip_mean = (avg_precip_min + avg_precip_max) / 2,
+    avr_pressao_mean = (avg_pressao_min + avg_pressao_max) / 2,
+    avr_umid_mean = (avg_umid_min + avg_umid_max) / 2
+  ) %>%
+  
+  # Remove grouping
+  ungroup() %>%
+  
+  # Remove rows where lag doesn't exist (first month for each geocodigo)
+  filter(!is.na(avg_temp_min)) %>%
+  
+  # Reorder columns:
+  # - geocodigo first
+  # - target and lagged month labels next
+  # - keep all other variables
+  # - drop raw month_date column
+  select(geocodigo, target_month_year, lagged_month_year, everything(), -month_date)
+
+# Output the final processed dataset
+monthly_data_shifted
+```

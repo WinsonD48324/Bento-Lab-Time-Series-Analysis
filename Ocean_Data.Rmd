@@ -1,0 +1,67 @@
+---
+title: "Ocean"
+author: "Winson"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+#Loads the data and libraries
+ocean <- readRDS("C:/Users/Winson/Downloads/ocean_climate_oscillations_data_2016_2024.rds")
+head(ocean)
+library(dplyr)
+library(lubridate)
+```
+
+```{r}
+monthly_indices <- ocean %>%
+  # Create a new column that rounds each date down to the first day of its month
+  mutate(month_date = floor_date(date, "month")) %>%
+  
+  # Group data by month
+  group_by(month_date) %>%
+  
+  # Compute monthly averages for each index, ignoring missing values
+  summarise(
+    avg_enso = mean(enso, na.rm = TRUE),
+    avg_iod  = mean(iod, na.rm = TRUE),
+    avg_pdo  = mean(pdo, na.rm = TRUE)
+  ) %>%
+  
+  # Sort data chronologically by month
+  arrange(month_date) %>%
+  
+  # Create readable month labels BEFORE applying lag
+  mutate(
+    # Label for the current (target) month
+    target_month_year = format(month_date, "%b-%Y"),
+    
+    # Label for the previous month (used to track lag relationship)
+    lagged_month_year = lag(target_month_year)
+  ) %>%
+  
+  # Shift the index values so each row contains the PREVIOUS month's data
+  mutate(
+    avg_enso = lag(avg_enso),
+    avg_iod  = lag(avg_iod),
+    avg_pdo  = lag(avg_pdo)
+  ) %>%
+  
+  # Remove the first row since lag() introduces NA values
+  filter(!is.na(avg_enso)) %>%
+  
+  # Reorder columns:
+  # - keep target month first
+  # - put lagged month second
+  # - keep all other columns
+  # - remove the raw month_date column
+  select(target_month_year, lagged_month_year, everything(), -month_date)
+
+# Output the final dataset
+monthly_indices
+
+```
